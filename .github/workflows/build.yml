@@ -1,0 +1,85 @@
+name: Build
+
+on: 
+  push:
+  release:
+    types: [prereleased]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, windows-latest]
+        include: 
+          - platform: windows-latest
+            qtarch: win64_msvc2015_64
+        
+    runs-on: ${{ matrix.platform }}
+    
+    steps:
+      - name: Get the version
+        id: get_version
+        shell: bash
+        run: echo ::set-output name=VERSION::$(echo $GITHUB_REF | cut -d / -f 3)
+      - name: Checking out sources
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+# =========================================================================================================
+      - name: Install MSVC compiler
+        if: matrix.platform == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          toolset: 14.2
+          arch: x64
+      - name: Installing Qt
+        uses: jurplel/install-qt-action@v2.6.1
+        with:
+          version: 5.14.1
+          arch: ${{ matrix.qtarch }}
+          mirror: http://mirrors.ocf.berkeley.edu/qt/
+      - name: Windows Build
+        if: matrix.platform == 'windows-latest'
+        run: |
+          mkdir build
+          cd build
+          qmake .. CONFIG+=release
+          nmake
+# --------------------------------------------------------
+      - name: Unix Build
+        shell: bash
+        if: matrix.platform != 'windows-latest'
+        run: |
+          mkdir build
+          cd build
+          qmake .. CONFIG+=release
+          make
+# ========================================================================================================= Deployments
+      - name: WindeployQt
+        if: matrix.platform == 'windows-latest'
+        run: |
+          cd build
+          cd release
+          mkdir deployment
+          copy QCIEAssmParser.exe deployment
+          cd deployment
+          windeployqt QCIEAssmParser.exe
+      - uses: actions/upload-artifact@v1
+        if: matrix.platform == 'windows-latest'
+        with:
+          name: QCIEAssmParser.zip
+          path: build/release/deployment
+# --------------------------------------------------------
+      - name: macDeployQt
+        if: matrix.platform == 'macos-latest'
+        run: |
+          cd build
+          mkdir deployment
+          macdeployqt QCIEAssmParser.app
+          mv QCIEAssmParser.app deployment
+      - uses: actions/upload-artifact@v1
+        if: matrix.platform == 'macos-latest'
+        with:
+          name: QCIEAssmParser.app
+          path: build/deployment
